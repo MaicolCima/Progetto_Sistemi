@@ -80,10 +80,111 @@ counter:
 
     
 GLOBAL resetVec,isr
-    ciao
+
+        
+
+; *** Vettore di reset ***
     
-    
+PSECT resetVec,class=CODE,delta=2
+resetVec:
+			pagesel	start			; imposta la pagina della memoria di programma in cui si trova l'indirizzo della label start
+			goto	start			; salta all'indirizzo indicato dalla label start
 
 
+
+;
+;
+; *** Programma principale ***
+;
+;
+PSECT MainCode,global,class=CODE,delta=2
+start:			; N.B: l'assembler non accetta una label sulla stessa riga di una direttiva
+			; inizializzazione hardware
+			
+			
+main_loop:
+    
+waitSleep:
+    
+goSleep:
+    
+    
+    
+    
+    
+			;*** Subroutine INIT_HW: inizializzazione dell'hardware ***
+INIT_HV:		
+			; OPTION_REG:
+			; - Bit 7: PULL UP enable negato sulla PORTB (0)
+			; - Bit 6: Interrupt edge select bit 1 rising / 0 falling (0)
+			; - Bit 5: TIMER0 clock source select 1 T0CKI / 0 Internal (Fosc/4) (0)
+			; - Bit 4: TIMET0 source edge select 1 falling / 0 rising (0)
+			; - Bit 3: Prescaler assignment 1 WDT / 0 TIMER0 (0)
+			; - Bit 2-0: Prescaler rate select (111) TIMER0 rate 1:256
+			banksel OPTION_REG		; banco di OPTION_REG
+			movlw	00000111B		 
+			movwf	OPTION_REG		; copia W (11000110b) in OPTION_REG
+			
+			
+			; registro INTCON:
+			; - tutti gli interrupt inzialmente disabilitati
+			; (verranno abilitati nel programma principale, quando tutte
+			;  le periferiche saranno correttamente inizializzate)
+			clrf	INTCON
+			
+			
+			; Porte I/O:
+			; - porte A,C,B,E settate come input digitali per tutti i pin
+			; - porta D: pin 0..3 settati come output (LED), pin 4..7 come input
+			banksel	TRISA			; banco di TRISA, stesso banco anche per gli altri registri TRISx
+			movlw	0xFF			; carica costante FF in W
+			movwf	TRISA			; copia W (FF) in TRISA
+			movwf	TRISC			; copia W (FF) in TRISC
+			movwf	TRISB			; copia W (FF) in TRISB
+			movwf	TRISE			; copia W (FF) in TRISE
+			movlw	0xF0			; carica costante F0 in W
+			movwf	TRISD			; copia W (F0) in TRISD
+    
+
+			; Di default, tutti i pin connessi all'ADC sono settati come input analogici,
+			; impedendone l'uso come I/O digitali. L'impostazione seguente rende I/O digitali
+			; i pin RB0..RB3
+			banksel ANSELH			; banco di ANSELH
+			clrf	ANSELH			; AN8..AN13 disattivati
+
+			; PORTB: abilita interrupt on-change sui 4 bit più bassi 
+			; NOTA: 
+			; In realtà le specifiche ci richiedono di utilizzare solo RB0 quindi dovremmo
+			; scrivere 0x01 su IOCB ed abilitare l'IOC solo su RB0.
+			; Decidiamo di attivare RB<0-3> per mostrare come scrivere il codice non caso 
+			; più frequente di utilizzo di più pulsanti.		
+			movlw	0x0F
+			banksel	IOCB
+			movwf	IOCB
+
+			; Timer1
+			; Impostazioni:
+			; - usa quarzo esterno (32768 Hz)
+			; - modalita' asincrona (funziona con quarzo esterno anche durante sleep)
+			; - prescaler = 2
+			; - timer off
+			; Con la frequenza del quarzo ed il prescaler a 2 si ha:
+			; - singolo tick ~= 61.036 us
+			; - periodo max = 4 s (contatore a 16 bit)
+			
+			; TlCON:
+			; - Bit 7: TIMER1 gate inverter 1 High / 0 Low (0)
+			; - Bit 6: TIMER1 gate enable bit 1 gate controlled / 0 always counting (0)
+			; - Bit 5-4: TIMER1 input clock prescale prescale 1:2 (01)
+			; - Bit 3: TIMER1 oscillator enable control 1 LP oscillator enable clock / 0 LP oscillator OFF (1)
+			; - Bit 2: External clock input syncronization 1 Non sincronizzato / 0 sincronizzato (1)
+			; - Bit 1: TMR1CS TIMER clock sourc select 1 external / 0 internal (1)
+			; - Bit 0: TMR1 On 1 enables / 0 stops (0)
+			banksel	T1CON
+			movlw	00011110B                 ;TMR1 OFF
+			movwf	T1CON
+			
+			
+			return	; uscita da subroutine e ritorno al punto del codice in cui era stata chiamata
 
 
