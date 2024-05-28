@@ -50,6 +50,8 @@ $RECYCLE.BIN/
 *.d3
 *.srn
 *.pre
+*.mk
+*.properties
 *.preprocess
 *.emulation
 *.folded
