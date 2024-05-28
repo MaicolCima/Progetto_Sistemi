@@ -1,0 +1,123 @@
+# Sistema operativo e file di sistema
+####################
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# Backup ed editor di testo
+####################
+*.bak
+*.tmp
+*.swp
+*.swo
+*.swn
+*.orig
+
+# MPLAB X IDE (Microchip)
+####################
+*.ds*
+*.d
+*.err
+*.hex
+*.cof
+*.elf
+*.map
+*.lst
+*.o
+*.d
+*.s
+*.S
+*.p1
+*.p2
+*.p3
+*.pre
+*.sym
+*.cmf
+*.htm
+*.bin
+*.d1
+*.d2
+*.d3
+*.srn
+*.pre
+*.preprocess
+*.emulation
+*.folded
+*.ref
+*.o*
+*.gld
+*.gmk
+*.fsl
+*.lkr
+*.log
+*.tc
+*.td
+*.trc
+*.pf
+*.mpf
+
+# MPLABX project files
+nbproject/private/
+nbproject/Makefile-*
+nbproject/configurations.xml
+nbproject/Package-*
+dist/
+build/
+*.x
+*.swp
+*.o
+
+# Debugger and programmer files
+####################
+*.mcc_generated_files/
+*.production/
+*.preprocessed/
+*.preprocess/
+*.pre/
+*.srn
+*.pfile
+*.asf
+*.cmf
+*.gld
+*.td
+*.ftx
+
+# General build directories
+####################
+build/
+dist/
+
+# Logs and temporary files
+####################
+logs/
+*.log
+*.temp
+*.tmp
+*.cache
+
+# IDE specific
+####################
+# MPLAB X IDE
+*.mlk
+*.plk
+*.pre
+*.inc
+*.tdf
+*.ld
+*.S
+
+# VS Code
+.vscode/
+
+# JetBrains IDEs
+.idea/
