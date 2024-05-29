@@ -92,7 +92,7 @@
       <pic-as-linker>
         <property key="linker-callgraph" value="std"/>
         <property key="linker-checksum" value=""/>
-        <property key="linker-custom-options" value=""/>
+        <property key="linker-custom-options" value="-presetVec=00h;-pisrVec=04h"/>
         <property key="linker-fill" value=""/>
         <property key="linker-format-hex-file-for-download" value="false"/>
         <property key="linker-libraries" value=""/>

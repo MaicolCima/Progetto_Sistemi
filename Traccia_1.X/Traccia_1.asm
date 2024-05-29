@@ -98,6 +98,8 @@ contatoreD:
     DS		1
 contatoreU:
     DS		1
+counterTmp:
+    DS		1
 
 PSECT udata
 print_buffer:
@@ -336,30 +338,36 @@ formatta_contatore:
 			movwf contatoreC
 			movwf contatoreD
 			movwf contatoreU
-			
+			movf counter,w
+			movwf counterTmp
 	    loop_div_1:
 			movlw 1
-			subwf counter, w
+			subwf counterTmp, w
 			btfss STATUS, 0      ; C = 0
 			goto end_div_1
+			movwf counterTmp 
 			incf contatoreU, f
 			goto loop_div_1		
 	    end_div_1:	
-				
+			movf counter,w
+			movwf counterTmp	
 	    loop_div_10:
 			movlw 10
-			subwf counter, w
+			subwf counterTmp, w
 			btfss STATUS, 0      ; C = 0
 			goto end_div_10
+			movwf counterTmp
 			incf contatoreD, f
 			goto loop_div_10		
 	    end_div_10:	
-    
+			movf counter,w
+			movwf counterTmp
 	    loop_div_100:
 			movlw 100
-			subwf counter, w
+			subwf counterTmp, w
 			btfss STATUS, 0      ; C = 0
 			goto end_div_100
+			movwf counterTmp
 			incf contatoreC, f
 			goto loop_div_100		
 	    end_div_100:	
