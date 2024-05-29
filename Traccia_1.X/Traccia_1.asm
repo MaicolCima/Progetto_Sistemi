@@ -92,6 +92,12 @@ decimals:
 ; variabili USART
 usart_counter:
     DS		1
+contatoreC: 
+    DS		1
+contatoreD:
+    DS		1
+contatoreU:
+    DS		1
 
 PSECT udata
 print_buffer:
@@ -321,25 +327,57 @@ reload_timer1:
 			bsf	T1CON,T1CON_TMR1ON_POSITION		; riattiva timer
 			return
 
-formatta_contatore:			
 
-	
 print_eusart:
-			banksel print_buffer
-			movlw   'H'            ; Carattere 'H'
-			movwf   print_buffer
-			movlw   'e'	          ; Carattere 'e'
-			movwf   print_buffer + 1
-			movlw   'l'            ; Carattere 'l'
-			movwf   print_buffer + 2
-			movlw   'l'             ; Carattere 'l'
-			movwf   print_buffer + 3
-			movlw   'o'             ; Carattere 'o'
-			movwf   print_buffer + 4
-			movlw   10               ; Fine stringa
-			movwf   print_buffer + 5
+    
+formatta_contatore:	
+    
+			movlw 00000000B
+			movwf contatoreC
+			movwf contatoreD
+			movwf contatoreU
 			
-			movlw   6
+	    loop_div_1:
+			movlw 1
+			subwf counter, w
+			btfss STATUS, 0      ; C = 0
+			goto end_div_1
+			incf contatoreU, f
+			goto loop_div_1		
+	    end_div_1:	
+				
+	    loop_div_10:
+			movlw 10
+			subwf counter, w
+			btfss STATUS, 0      ; C = 0
+			goto end_div_10
+			incf contatoreD, f
+			goto loop_div_10		
+	    end_div_10:	
+    
+	    loop_div_100:
+			movlw 100
+			subwf counter, w
+			btfss STATUS, 0      ; C = 0
+			goto end_div_100
+			incf contatoreC, f
+			goto loop_div_100		
+	    end_div_100:	
+	
+			banksel print_buffer
+			movlw   '0'   
+			addwf   contatoreC, w
+			movwf   print_buffer
+			movlw   '0'	
+			addwf   contatoreD, w
+			movwf   print_buffer + 1
+			movlw   '0'  
+			addwf   contatoreU, w
+			movwf   print_buffer + 2
+			movlw   10 
+			movwf   print_buffer + 3
+
+			movlw   4
 			movwf usart_counter
 			banksel print_buffer
 			movlw print_buffer
