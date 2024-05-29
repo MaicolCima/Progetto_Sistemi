@@ -288,7 +288,7 @@ INIT_HW:
 			movlw 00000000B
 			movwf BAUDCTL
 			banksel SPBRG
-			movlw 00011001B
+			movlw 12
 			movwf SPBRG
 			banksel SPBRGH
 			movlw 00000000B
@@ -324,21 +324,21 @@ reload_timer1:
 
 	
 print_eusart:
-    
-			movlw   "H"             ; Carattere 'H'
-			movwf   (print_buffer)
-			movlw   "e"             ; Carattere 'e'
-			movwf   (print_buffer + 1)
-			movlw   "l"             ; Carattere 'l'
-			movwf   (print_buffer + 2)
-			movlw   "l"             ; Carattere 'l'
-			movwf   (print_buffer + 3)
-			movlw   "o"             ; Carattere 'o'
-			movwf   (print_buffer + 4)
-			movlw   0               ; Fine stringa
-			movwf   (print_buffer + 5)
+			banksel print_buffer
+			movlw   'H'            ; Carattere 'H'
+			movwf   print_buffer
+			movlw   'e'	          ; Carattere 'e'
+			movwf   print_buffer + 1
+			movlw   'l'            ; Carattere 'l'
+			movwf   print_buffer + 2
+			movlw   'l'             ; Carattere 'l'
+			movwf   print_buffer + 3
+			movlw   'o'             ; Carattere 'o'
+			movwf   print_buffer + 4
+			movlw   10               ; Fine stringa
+			movwf   print_buffer + 5
+			
 			movlw   6
-    
 			movwf usart_counter
 			banksel print_buffer
 			movlw print_buffer
@@ -514,13 +514,6 @@ usart_tx_end:
 			bcf PIE1, 4
 			bsf	canSleep, 0
 			goto irq_end
-			
-		
-			
-			
-			
-			
-			
 			
 			
 			; ripristino stato registri CPU precedente all'interruzione:
