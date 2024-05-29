@@ -193,7 +193,7 @@ goSleep:
 
     
 			;*** Subroutine INIT_HW: inizializzazione dell'hardware ***
-INIT_HV:		
+INIT_HW:		
 			; OPTION_REG:
 			; - Bit 7: PULL UP enable negato sulla PORTB (0)
 			; - Bit 6: Interrupt edge select bit 1 rising / 0 falling (0)
@@ -294,17 +294,55 @@ reload_timer1:
 
 			
 PSECT isrVec,class=CODE,delta=2
-isr:			
+isr:			; Salvataggio stato registri CPU (context saving).
+			; A differenza di quasi tutte le altre architetture, il PIC non salva lo stato
+			; della CPU automaticamente all'ingresso di un interrupt (e non lo ripristina
+			; all'uscita). Questo perche' non esiste uno stack utilizzabile genericamente,
+			; ma solo uno stack limitato al salvataggio ed al ripristino di PC.
+			; In genere quindi, per assicurare che il programma principale funzioni sempre
+			; correttamente anche in presenza di interrupt, occorre gestire queste due
+			; fasi manualmente. I registri da salvare per il PIC16 sono W, STATUS e PCLATH.
+			; In alcuni casi cio' puo' non essere necessario:
+			; - se l'interrupt esegue solo istruzioni che non alterano tali registri.
+			; - se il programma principale non usa mai tali registri (ad esempio, l'esecuzione
+			;   di tutti i task e' gestita dalla routine di interrupt, il programma principale
+			;   esegue solo un loop vuoto).
+			movwf	w_temp			; copia W in w_temp
+			swapf	STATUS,w		; inverte i nibble di STATUS salvando il risultato in W.
+									; Questo trucco permette di copiare STATUS senza alterarlo
+									; (swapf e' una delle poche istruzioni che non alterano i bit di stato).
+			movwf	status_temp		; copia W (= STATUS) in status_temp (con i nibble invertiti).
+			movf	PCLATH,w		; copia il registro PCLATH in W (registro da salvare perche' contiene i
+									; bit piu' significativi del program counter, usati da GOTO e CALL,
+									; e settati dalla direttiva pagesel).
+			movwf	pclath_temp		; copia W (= PCLATH) in pclath_temp.
+
+			; *** codice interrupt ***
+			; poiche' nel PIC16 esiste una solo routine di interrupt per tutte le sorgenti, occorre
+			; testare tutti i flag che possono essere stati settati per vedere quale periferica
+			; ha generato l'interrupt. Una volta processato l'interrupt, occorre anche assicurarsi
+			; di azzerare tale flag, altrimenti la CPU entrerebbe in interrupt continuamente
+
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
+			
+test_timer0:
+			btfss	INTCON,INTCON_T0IF_POSITION		; se il bit T0IF = 1 (c'e' stato un interrupt del timer), salta istruzione seguente
+			goto 	test_button		; salta a test successivo
+			btfss	INTCON,INTCON_T0IE_POSITION    ; controlla anche che l'interrupt fosse effettivamente abilitato
+			goto	test_button
+			; avvenuto interrupt timer0: termine debouncing
+			bsf	INTCON,INTCON_RBIE_POSITION	; riabilita interrupt porta B
+			bcf	INTCON,INTCON_T0IF_POSITION	; azzera flag interrupt timer
+			bcf	INTCON,INTCON_T0IE_POSITION	; disabilita interrupt timer, verrà abililato quando serve in test_button
+			; se il debouncing e' seguito al rilascio del pulsante,
+			; segnala al programma principale che puo' andare in sleep.
+			bsf	canSleep, 0	; altrimenti abilita sleep
+			goto	irq_end		; vai a fine routine di interrupt
+			
+			
+			
+			
+			
 test_button:
 			; testa evento port-change di PORTB (RBIF + RBIE)
 			btfss	INTCON,INTCON_RBIF_POSITION	    ; test flag interrupt PORTB
@@ -357,6 +395,38 @@ button_end:
 			; eventuali altri eventi di interrupt
 			; fine codice interrupt
     
+test_timer1:
+			; testa evento overflow timer1 (TMR1IF + TMR1IE)
+			banksel	PIR1
+			btfss	PIR1,PIR1_TMR1IF_POSITION
+			goto	irq_end
+			banksel	PIE1
+			btfss	PIE1,PIE1_TMR1IE_POSITION
+			goto	irq_end
+			; avvenuto interrupt timer1: toggle LED1
+			
+			; da sostituire con comunicazione seriale
+			
+			movlw	0x01	
+			banksel	PORTD
+			xorwf	PORTD,f  ;0x01 XOR PORTD -> 1 XOR 0(led off) = 1(led on); 1 XOR 1(led on) = 0(led off)
+			; ricarica contatore timer1
+			pagesel	reload_timer1
+			call	reload_timer1
+			; fine evento timer1
+			goto	irq_end
+
+			; eventuali altri eventi di interrupt
+
+			; fine codice interrupt
+			
+			
+			
+			
+			
+			
+			
+			
 			; ripristino stato registri CPU precedente all'interruzione:
 irq_end:		movf	pclath_temp,w	; copia pclath_temp in W
 			movwf	PCLATH			; copia W in PCLATH
@@ -370,14 +440,3 @@ irq_end:		movf	pclath_temp,w	; copia pclath_temp in W
 			retfie				; uscita da interrupt e ritorno al punto in cui il programma era stato interrotto
 
 			END resetVec
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
