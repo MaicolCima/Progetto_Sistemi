@@ -92,9 +92,10 @@ decimals:
 ; variabili USART
 usart_counter:
     DS		1
+
+PSECT udata
 print_buffer:
     DS		20
-    
 
  
 GLOBAL resetVec,isr
@@ -320,6 +321,34 @@ reload_timer1:
 			bsf	T1CON,T1CON_TMR1ON_POSITION		; riattiva timer
 			return
 
+
+	
+print_eusart:
+    
+			movlw   "H"             ; Carattere 'H'
+			movwf   (print_buffer)
+			movlw   "e"             ; Carattere 'e'
+			movwf   (print_buffer + 1)
+			movlw   "l"             ; Carattere 'l'
+			movwf   (print_buffer + 2)
+			movlw   "l"             ; Carattere 'l'
+			movwf   (print_buffer + 3)
+			movlw   "o"             ; Carattere 'o'
+			movwf   (print_buffer + 4)
+			movlw   0               ; Fine stringa
+			movwf   (print_buffer + 5)
+			movlw   6
+    
+			movwf usart_counter
+			banksel print_buffer
+			movlw print_buffer
+			movwf FSR
+			banksel PIE1
+			bsf PIE1, 4
+			bcf	canSleep, 0
+			return
+			
+
 			
 PSECT isrVec,class=CODE,delta=2
 isr:			; Salvataggio stato registri CPU (context saving).
@@ -427,14 +456,14 @@ test_timer1:
 			; testa evento overflow timer1 (TMR1IF + TMR1IE)
 			banksel	PIR1
 			btfss	PIR1,PIR1_TMR1IF_POSITION
-			goto	irq_end
+			goto	test_uart
 			banksel	PIE1
 			btfss	PIE1,PIE1_TMR1IE_POSITION
-			goto	irq_end
+			goto	test_uart
 			; avvenuto interrupt timer1: toggle LED1
 			
 			; da sostituire con comunicazione seriale
-			
+			call print_eusart	
 			movlw	0x01	
 			banksel	PORTD
 			xorwf	PORTD,f  ;0x01 XOR PORTD -> 1 XOR 0(led off) = 1(led on); 1 XOR 1(led on) = 0(led off)
@@ -447,7 +476,50 @@ test_timer1:
 
 			; eventuali altri eventi di interrupt
 
-			; fine codice interrupt
+			
+			
+			
+			
+test_uart:	    
+			banksel PIE1
+			btfss PIE1, 4	; TXIE = 4
+			goto irq_end
+			banksel PIR1
+			btfss PIR1, 4	; TXIF = 4
+			goto irq_end
+		    
+			; seriale pronta per trasmissione nuovo byte
+			
+			movf usart_counter, w
+			btfsc STATUS, 2   ; Z = 2
+			; byte da inviare finiti
+			goto usart_tx_end
+			; altro byte da inviare
+			movf INDF, w
+			banksel TXREG
+			movwf TXREG
+			incf FSR
+			decf usart_counter, f
+			
+			
+wait_usart:		
+			banksel TXSTA
+			btfss TXSTA, 1    ; TMRT = 1
+			goto wait_usart
+			goto irq_end
+			
+usart_tx_end:
+			; caso dati da trasmettere terminati 
+			banksel PIE1
+			bcf PIE1, 4
+			bsf	canSleep, 0
+			goto irq_end
+			
+		
+			
+			
+			
+			
 			
 			
 			
