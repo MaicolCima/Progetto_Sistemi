@@ -56,6 +56,15 @@
 
 tmr_10ms	EQU		(256 - 39)	; valore iniziale del contatore di TMR0 per contare 10 ms
 	
+; TIMER1:
+; In base alle impostazioni del timer, un periodo di 4 s con prescaler uguale a 2 corrisponde a
+; 65536 incrementi. Il contatore di timer1 e' a 16 bit, per cui occorre
+; impostare il contatore inizialmente a 65536 - 65536 = 0
+	
+tmr_4s		EQU		(0)	; valore iniziale del contatore di timer1 per contare 500 ms
+		
+; NOTA: e' una costante a 16 bit, il codice ne usera' 8 per volta per caricare
+;  le due meta' del contatore di timer1
 
 ; ***Definizione di variabili***
 
@@ -90,8 +99,6 @@ resetVec:
 			pagesel	start			; imposta la pagina della memoria di programma in cui si trova l'indirizzo della label start
 			goto	start			; salta all'indirizzo indicato dalla label start
 
-
-
 ;
 ;
 ; *** Programma principale ***
@@ -100,17 +107,90 @@ resetVec:
 PSECT MainCode,global,class=CODE,delta=2
 start:			; N.B: l'assembler non accetta una label sulla stessa riga di una direttiva
 			; inizializzazione hardware
+			pagesel	INIT_HW			; direttiva che imposta la pagina della memoria di programma in cui risiede la subroutine INIT_HW
+			call	INIT_HW			; chiamata alla subroutine indicata dalla label INIT_HW
+
+			; inizializzazione stato LED (tutti LED spenti)
+			banksel	PORTD			; selezione banco RAM di PORTD
+			clrf	PORTD
+
+			; inizializzazione stato precedente porta B (pulsanti non premuti)
+			movlw	0x0F
+			movwf	portBPrev
+
+			; Abilita interrupt on-change di PORTB per evento pulsante
+			banksel	PORTB
+			movf	PORTB, w	; legge PORTB per azzerare condizione di mismatch (vedere datasheet)
+			bcf	INTCON, INTCON_RBIF_POSITION; azzera flag di avvenuto interrupt
+			bsf	INTCON, INTCON_RBIE_POSITION	; abilita interrupt PORTB on-change
+
+			; carica contatore timer1 con valore iniziale per contare 4 s
+			pagesel	reload_timer1
+			call	reload_timer1
+			
+			; abilita interrupt timer1
+			banksel	PIE1
+			bsf	PIE1,PIE1_TMR1IE_POSITION
+			
+			; Abilita gli interrupt delle periferiche aggiuntive (tra cui timer1)
+			bsf	INTCON,INTCON_PEIE_POSITION
+
+			; Abilita gli interrupt globalmente
+			bsf	INTCON,INTCON_GIE_POSITION
+
+			; Inizialmente la CPU puo' andare in sleep
+			bsf	canSleep,0
 			
 			
 main_loop:
+			; Dato che tutto il lavoro e' svolto dalla routine di interrupt,
+			; il programma principale potrebbe mandare il microcontrollore
+			; in modalita' sleep per essere risvegliato dal successivo
+			; interrupt. Ma non tutte le periferiche funzionano durante lo
+			; sleep, come il timer 0 (usato per il debouncing) e il timer2
+			; (usato per generare la PWM per il buzzer), che dipendono
+			; dal clock della CPU.
+			; Utilizziamo percio' un bit che indica quando il programma puo'
+			; andare in sleep, che sara' settato dall'interrupt quando opportuno.
     
 waitSleep:
+			bcf	INTCON, INTCON_GIE_POSITION	; disabilita interrupt globalmente
+								; stiamo iniziando una sezione critica, dunque
+								; non possiamo interrompere la sequenzialita'
+								; delle operazioni. Perche'?
+			btfsc	canSleep, 0			; sleep possibile?
+			goto	goSleep
+			bsf	INTCON, INTCON_GIE_POSITION
+			goto	waitSleep
     
 goSleep:
-    
-    
-    
-    
+			; Per vedere se va in sleep
+			#ifdef SHOW_SLEEP
+				banksel	PORTD
+				bcf PORTD,3		; spegne LED4 prima di sleep
+			#endif
+			
+			sleep					; la CPU si ferma!
+			bsf	INTCON, INTCON_GIE_POSITION
+			; a questo punto la CPU si e' risvegliata per via di un
+			; interrupt, che nel nostro caso puo' essere solo un pulsante
+			; (PORTB on-change interrupt) o il timer1.
+			; Avendo riabilitato gli interrupt (bit GIE), viene subito
+			; eseguita la routine di interrupt, quindi il programma
+			; continua.
+			; NOTA: abilitando una sorgente di interrupt (come RBIE) senza
+			; abilitare GIE, si ottiene il risveglio dallo sleep senza
+			; bisogno di avere una routine di interrupt.
+
+			#ifdef SHOW_SLEEP
+                    
+			banksel	PORTD
+			bsf		PORTD,3		; accende LED4 dopo risveglio
+			#endif
+
+			goto	main_loop		; ripete il loop principale del programma
+			; NOTA: il codice deve sempre essere racchiuso in un loop!
+
     
 			;*** Subroutine INIT_HW: inizializzazione dell'hardware ***
 INIT_HV:		
@@ -184,7 +264,120 @@ INIT_HV:
 			movlw	00011110B                 ;TMR1 OFF
 			movwf	T1CON
 			
-			
 			return	; uscita da subroutine e ritorno al punto del codice in cui era stata chiamata
+			
+			
+INCREMENTO_CONTATORE:   
+		
+			incf counter, f		 ; Incrementa il valore nel registro f
+			return   
+			
 
+reload_timer1:
+			; ricarica contatore timer1 per ricominciare conteggio.
+			; In modalita' asincrona, occorre arrestare il timer prima
+			; di aggiornare i due registri del contatore
+			banksel	T1CON
+			bcf	T1CON,T1CON_TMR1ON_POSITION	; arresta timer
+			; le funzioni "low" e "high" forniscono il byte meno e piu'
+			;  significativo di una costante maggiore di 8 bit
+			banksel	TMR1L
+			movlw	low  tmr_4s
+			movwf	TMR1L
+			movlw	high tmr_4s
+			movwf	TMR1H
+			banksel	PIR1
+			bcf	PIR1,PIR1_TMR1IF_POSITION		; azzera flag interrupt
+			banksel	T1CON
+			bsf	T1CON,T1CON_TMR1ON_POSITION		; riattiva timer
+			return
 
+			
+PSECT isrVec,class=CODE,delta=2
+isr:			
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+test_button:
+			; testa evento port-change di PORTB (RBIF + RBIE)
+			btfss	INTCON,INTCON_RBIF_POSITION	    ; test flag interrupt PORTB
+			goto	test_timer1
+			btfss	INTCON,INTCON_RBIE_POSITION	    ; test se l'interrupt PORTB è abilitato
+			goto	test_timer1
+			
+			; avvenuto evento port-change di PORTB
+			banksel	PORTB
+			movf	PORTB, w	; legge PORTB eliminando condizione di mismatch
+			bcf	INTCON,INTCON_RBIF_POSITION	; azzera flag evento interrupt
+			; XOR di stato precedente porta (portBPrev) con stato attuale (PORTB).
+			; In questo modo i bit diversi hanno risultato 1
+			xorwf	portBPrev, w		; XOR di W (che conteneva PORTB) con portBPrev ( 1 in corrispondenza dei bit che hanno cambiato stato)
+			andlw	0x01			; mi testerà solo il pulsante sul bit 0
+			btfsc	STATUS,STATUS_Z_POSITION		; se il risultato non e' nullo (Z=0): un pulsante ha cambiato stato
+			goto	button_end		; altrimenti non fare niente
+			
+			; il pulsante e' stato premuto o rilasciato, iniziare il conteggio di debouncing
+			bcf	INTCON,INTCON_RBIE_POSITION		; disabilita interrupt PORTB per durata debouncing
+			banksel	TMR0
+			movlw	tmr_10ms		; carica valore iniziale per il contatore di timer0
+			movwf	TMR0
+			bcf	INTCON,INTCON_T0IF_POSITION		; azzera evento interrupt di timer0
+			bsf	INTCON,INTCON_T0IE_POSITION		; abilita interrupt di timer0
+			
+			; vieta lo sleep fino a termine debouncing
+			bcf	canSleep, 0	
+			
+			
+			; testa se il pulsante è stato premuto o rilasciato
+			btfss	portBPrev, 0 ; se lo stato precedente era 1 -> premuto
+			; dal codice precedente abbiamo capito se c'è stato un cambiamento di stato su RB0,
+			; quindi, se c'è stato un cambiamento di stato e lo stato precedente era 1, significa che 
+			; RB0 è passato da 1(rilasciato)-> 0(premuto) e cioè che il pulsante è stato premuto!
+			; N.B.
+			; se il bit 0 della porta B è = 0 (pulsante premuto)
+			; se il bit 0 della porta B è = 1 (pulsante rilasciato)
+			goto	button_end  ; altrimenti non fare niente
+			; pulsante premuto: azione scorrimento LED
+			pagesel INCREMENTO_CONTATORE
+			call	INCREMENTO_CONTATORE
+			
+button_end:
+			; salva nuovo stato di PORTB su portBPrev
+			banksel PORTB
+			movf	PORTB, w
+			movwf	portBPrev
+			goto	irq_end		; va a fine interrupt
+			; eventuali altri eventi di interrupt
+			; fine codice interrupt
+    
+			; ripristino stato registri CPU precedente all'interruzione:
+irq_end:		movf	pclath_temp,w	; copia pclath_temp in W
+			movwf	PCLATH			; copia W in PCLATH
+			swapf	status_temp,w	; inverte i nibble di status_temp salvando il risultato in W
+			; anche in questo caso serve a non alterare STATUS stesso
+			movwf	STATUS			; copia W (che contiene lo STATUS originale ripristinato dopo 2 inversioni) in STATUS
+			; per ripristinare W senza alterare STATUS appena ripristinato, si utilizza sempre swapf
+			swapf	w_temp,f		; prima inversione di w_temp, risultato su se stesso
+			swapf	w_temp,w		; seconda inversione di w_temp, risultato in W (W contiene il valore precedente all'interrupt)
+
+			retfie				; uscita da interrupt e ritorno al punto in cui il programma era stato interrotto
+
+			END resetVec
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
