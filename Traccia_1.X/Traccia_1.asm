@@ -29,6 +29,7 @@
 ; 2) Direttiva #include
     
     #include <xc.inc>		// file che contiene le definizioni dei simboli (nomi registri, nomi bit dei registri, ecc).
+    #define SHOW_SLEEP
     
 ; 3) Direttiva CONFIG
     
@@ -85,9 +86,17 @@ canSleep:
 ; variabile che indica il contatore
 counter:
     DS		1
+; buffer per la conversione del numero in decimale
+decimals:
+    DS		2
+; variabili USART
+usart_counter:
+    DS		1
+print_buffer:
+    DS		20
     
 
-    
+ 
 GLOBAL resetVec,isr
 
         
@@ -264,11 +273,30 @@ INIT_HW:
 			movlw	00011110B                 ;TMR1 OFF
 			movwf	T1CON
 			
+			; USART
+			; BRGH = 1, BRG16 = 0, SYNC = 0
+			; BAUD RATE 9600 -> SPBRG = 25 decimale
+			;
+			banksel TXSTA
+			movlw 00100100B
+			movwf TXSTA
+			banksel RCSTA
+			movlw 10010000B
+			movwf RCSTA
+			banksel BAUDCTL
+			movlw 00000000B
+			movwf BAUDCTL
+			banksel SPBRG
+			movlw 00011001B
+			movwf SPBRG
+			banksel SPBRGH
+			movlw 00000000B
+			movwf SPBRGH
+			
 			return	; uscita da subroutine e ritorno al punto del codice in cui era stata chiamata
 			
 			
 INCREMENTO_CONTATORE:   
-		
 			incf counter, f		 ; Incrementa il valore nel registro f
 			return   
 			
@@ -410,6 +438,7 @@ test_timer1:
 			movlw	0x01	
 			banksel	PORTD
 			xorwf	PORTD,f  ;0x01 XOR PORTD -> 1 XOR 0(led off) = 1(led on); 1 XOR 1(led on) = 0(led off)
+			
 			; ricarica contatore timer1
 			pagesel	reload_timer1
 			call	reload_timer1
@@ -419,11 +448,6 @@ test_timer1:
 			; eventuali altri eventi di interrupt
 
 			; fine codice interrupt
-			
-			
-			
-			
-			
 			
 			
 			
