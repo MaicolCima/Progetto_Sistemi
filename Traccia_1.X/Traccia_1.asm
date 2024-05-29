@@ -321,6 +321,7 @@ reload_timer1:
 			bsf	T1CON,T1CON_TMR1ON_POSITION		; riattiva timer
 			return
 
+formatta_contatore:			
 
 	
 print_eusart:
