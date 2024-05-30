@@ -514,7 +514,7 @@ test_button:
 ;      -> Se il bit 0 della porta B è = 1 (pulsante rilasciato)
  
 	goto	button_end			    ; Altrimenti non fare niente
-; Pulsante premuto: azione scorrimento LED
+; Pulsante premuto: incremento contatore
 	pagesel INCREMENTO_CONTATORE
 	call	INCREMENTO_CONTATORE
 			
