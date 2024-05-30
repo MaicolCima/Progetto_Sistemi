@@ -107,7 +107,7 @@ contatoreU:
 
 PSECT udata
 print_buffer:
-    DS		20
+    DS		3
 
 ; Etichette resetVec e isr dichiarate come globali
     
@@ -134,7 +134,7 @@ start:						    ; N.B: l'assembler non accetta una label sulla stessa riga di un
 	movwf counter
 			
 ; Inizializzazione stato LED (tutti LED spenti)
-	banksel	PORTD			; Selezione banco RAM di PORTD
+	banksel	PORTD				    ; Selezione banco RAM di PORTD
 	clrf	PORTD
 
 ; Inizializzazione stato precedente porta B (pulsanti non premuti)
@@ -194,7 +194,7 @@ goSleep:
 			
 	sleep					    ; La CPU si ferma!
 	bsf	INTCON, INTCON_GIE_POSITION
-; a questo punto la CPU si e' risvegliata per via di un
+; A questo punto la CPU si e' risvegliata per via di un
 ; interrupt, che nel nostro caso puo' essere solo un pulsante
 ; (PORTB on-change interrupt) o il TIMER1.
 ; Avendo riabilitato gli interrupt (bit GIE), viene subito
@@ -232,7 +232,7 @@ INIT_HW:
 ; Registro INTCON:
 ; - tutti gli interrupt inzialmente disabilitati
 ; (verranno abilitati nel programma principale, quando tutte
-;  le periferiche saranno correttamente inizializzate)
+; le periferiche saranno correttamente inizializzate)
 	clrf	INTCON
 			
 ; Porte I/O:
@@ -283,23 +283,63 @@ INIT_HW:
 ; - Bit 2: External clock input syncronization 1 Non sincronizzato / 0 sincronizzato (1)
 ; - Bit 1: TMR1CS TIMER clock sourc select 1 external / 0 internal (1)
 ; - Bit 0: TMR1 On 1 enables / 0 stops (0)
+	
 	banksel	T1CON
 	movlw	00011110B			    ;TMR1 OFF
 	movwf	T1CON
 			
-; USART
+; Inizializzazione USART
+	
+; Set dei registri TXSTA, RCSTA, BAUDCTL e SPBRG	
 ; BRGH = 1, BRG16 = 0, SYNC = 0
 ; BAUD RATE 9600 -> SPBRG = 25 decimale
 
-	banksel TXSTA
+; TXSTA:
+; - Bit 7: Clock Source Select asincrona don't care (0)
+; - Bit 6: 9-bit trasmission enable (0 disabled)
+; - Bit 5: Trasmit enable bit (1 enabled)
+; - Bit 4: SYNC (0 asynchronous mode)
+; - Bit 3: 0 non utilizzato
+; - Bit 2: BRGH high baud rate select bit (1 high speed)
+; - Bit 1: Trasmit shift register STATUS bit (1 empty / 0 full)
+; - Bit 0: TX9D nono bit di trasmissione (non utilizzato in questo caso)
+	
+	banksel TXSTA				    ;
 	movlw 00100100B
 	movwf TXSTA
+	
+; RCSTA:
+; - Bit 7: Serial port enable bit (1 abilitata)
+; - Bit 6: nono bit attivo in ricezione (0 ricezione 8-bit)
+; - Bit 5: SREN asynchronous don't care 
+; - Bit 4: continous receive enable bit (0)
+; - Bit 3: Address detect enable (0 disabilitato)
+; - Bit 2: Framing error bit (0 no framming error)
+; - Bit 1: Overrun error bit (0 no overrun error)
+; - Bit 0: RX9D	nono bit ricevuto
+	
 	banksel RCSTA
-	movlw 10010000B
+	movlw 10000000B
 	movwf RCSTA
+
+; BAUDCTL:
+; - Bit 7: auto-baud detect overflow bit (1 overflow / 0 no overflow)
+; - Bit 6: recive idle flag (1 idle / 0 receiving)
+; - Bit 5: unimplemented 
+; - Bit 4: Synchronous clock polarity select (0 non inverted data)
+; - Bit 3: 16-bit baud rate generator bit (0 8-bit baud rate generator)
+; - Bit 2: unimplemented 
+; - Bit 1: wake-up enable (0 receiver is operating normally)
+; - Bit 0: auto baud detect enable bit (0 auto baud detect mode is disabled)
+	
 	banksel BAUDCTL
 	movlw 00000000B
 	movwf BAUDCTL
+
+; SPBRG:
+; con BRGH = 1 in TXSTA Baud rate = Fosc / (16*(SPBRG + 1))
+; Con Fosc = 4MHz vogliamo Baud rate ~= 19200 quindi SPBRG = 12
+	
 	banksel SPBRG
 	movlw 12
 	movwf SPBRG
@@ -361,18 +401,21 @@ print_eusart:
 	
 ; Preparazione buffer di stampa
     
+; Per trasmettere le cifre carico w con la cifra 0 e poi vado ad aggiungere la cifra corrispondente
+; alla decina o all'unità, sfruttando la sequenzialità dei caratteri ASCII. 
+    
 		    banksel print_buffer	    ; Seleziona bank di memoria in cui è definito print_buffer
 		    movlw   '0'			    ; Carica il carattere '0' nel registro w 
-		    addwf   contatoreD, w	    ; Aggiunge il contenuto di contatoreD al valore '0' e memorizza il risultato in w
-		    movwf   print_buffer	    ; Memorizza il valore risultante in print_buffer
-		    movlw   '0'			    ; Carica il carattere '0' nel registro w
-		    addwf   contatoreU, w	    ; Aggiunge il contenuto di contatoreU al valore '0' e memorizza il risultato in W
+		    addwf   contatoreD, w	    
+		    movwf   print_buffer	    
+		    movlw   '0'			    
+		    addwf   contatoreU, w	    
 		    movwf   print_buffer + 1
-		    movlw   10 
+		    movlw   10			    ; Carattere "a capo"
 		    movwf   print_buffer + 2
-		    movlw   3
-			
-		    movwf usart_counter
+		    
+		    movlw   3			    ; Carico il numero di byte da stampare in w
+		    movwf usart_counter		    
 		    banksel print_buffer
 		    movlw print_buffer
 		    movwf FSR
