@@ -8,8 +8,10 @@
 ; fino a quel momento, sotto forma di numero a due cifre decimali.
 ;
 ; - utilizzo del TIMER1 per conteggio dei 4 secondi
-; - utilizzo del TIMER0 per controllo debouncing
-; - utilizzo della PORTB per pulsante
+; - utilizzo del TIMER0 per debouncing pulsante
+; - utilizzo del pulsante 1 collegato sul pin 0 di PORTB
+; - utilizzo della comunicazione UART per inviare il conteggio delle pressioni max 99
+; - micro in sleep quando possibile
 ;
 ; Descrizione hardware
 ; - scheda Cedar Pic Board (vedere schematico).
@@ -336,7 +338,7 @@ INIT_HW:
 	movlw 00000000B
 	movwf BAUDCTL
 
-; SPBRG:
+; SPBRG registro di settaggio del baud rate:
 ; con BRGH = 1 in TXSTA Baud rate = Fosc / (16*(SPBRG + 1))
 ; Con Fosc = 4MHz vogliamo Baud rate ~= 19200 quindi SPBRG = 12
 	
@@ -351,7 +353,7 @@ INIT_HW:
 			
 			
 INCREMENTO_CONTATORE:   
-			incf counter, f		    ; Incremento del valore nel registro f
+			incf counter, f		    ; Incremento del valore nel registro counter
 			return   
 			
 
@@ -416,12 +418,12 @@ print_eusart:
 		    
 		    movlw   3			    ; Carico il numero di byte da stampare in w
 		    movwf usart_counter		    
-		    banksel print_buffer
-		    movlw print_buffer
-		    movwf FSR
-		    banksel PIE1
-		    bsf PIE1, 4
-		    bcf	canSleep, 0
+		    banksel print_buffer	    ; Seleziono il banco di RAM contentente il buffer di stampa
+		    movlw print_buffer		    ; Carico il print buffer in w
+		    movwf FSR			    ; carico l'indirizzo del print buffer nell'FSR
+		    banksel PIE1		    
+		    bsf PIE1, 4			    ; abilito l'interrupt della USART per trasmettere
+		    bcf	canSleep, 0		    ; non può andare in sleep fino a quando non finisce la trasmissione
 		    return
 			
 	
@@ -474,7 +476,7 @@ test_timer0:
 			
 	
 test_button:
-; Testa evento port-change di PORTB (RBIF + RBIE)
+; Testa evento port-change di PORTB (RBIF + RBIE) altrimenti testo l'interrupt TIMER 1
 	btfss	INTCON,INTCON_RBIF_POSITION	    ; Test flag interrupt PORTB
 	goto	test_timer1
 	btfss	INTCON,INTCON_RBIE_POSITION	    ; Test se l'interrupt PORTB è abilitato
@@ -526,20 +528,18 @@ button_end:
 ; Fine codice interrupt
     
 test_timer1:
-; Testa evento overflow timer1 (TMR1IF + TMR1IE)
+; Testa evento overflow timer1 (TMR1IF + TMR1IE) altrimenti testo l'interrupt UART
 	banksel	PIR1
 	btfss	PIR1,PIR1_TMR1IF_POSITION
 	goto	test_uart
 	banksel	PIE1
 	btfss	PIE1,PIE1_TMR1IE_POSITION
-	goto	test_uart
+	goto	test_uart		    
 ; Avvenuto interrupt timer1: toggle LED1
-			
-; Da sostituire con comunicazione seriale
-	call print_eusart	
+	call print_eusart			    ; chiamata alla routine di trasmissione del numero di pressioni	
 	movlw	0x01	
-	banksel	PORTD
-	xorwf	PORTD,f  ;0x01 XOR PORTD -> 1 XOR 0(led off) = 1(led on); 1 XOR 1(led on) = 0(led off)
+	banksel	PORTD				    ; cambio di stato del led 1 ogni volta che c'è overflow del timer
+	xorwf	PORTD,f				    ; 0x01 XOR PORTD -> 1 XOR 0(led off) = 1(led on); 1 XOR 1(led on) = 0(led off)
 			
 ; Ricarica contatore timer1
 	pagesel	reload_timer1
@@ -552,37 +552,37 @@ test_timer1:
 					
 test_uart:	    
 	banksel PIE1
-	btfss PIE1, 4				    ; TXIE = 4
+	btfss PIE1, 4				    ; controllo il bit TXIE (se l'interrupt della USART è abilitato)
 	goto irq_end
 	banksel PIR1
-	btfss PIR1, 4				    ; TXIF = 4
+	btfss PIR1, 4				    ; controllo il bit TXIF (se è avvenuto un interrupt)
 	goto irq_end
-		    
-; Seriale pronta per trasmissione nuovo byte
-			
-	movf usart_counter, w
-	btfsc STATUS, 2				    ; Z = 2
-; Byte da inviare finiti
-	goto usart_tx_end
-; Altro byte da inviare
-	movf INDF, w
-	banksel TXREG
-	movwf TXREG
-	incf FSR
-	decf usart_counter, f
+; se c'è stato l'interrupt	    
+; la Seriale è pronta per la trasmissione di un nuovo byte
+	movf usart_counter, w			    ; carico il contatore dei byte da trasmettere in W
+	btfsc STATUS, 2				    ; controllo il bit Z del registro STATUS per vedere se il risultato dell'operazione è zero
+; caso Byte da inviare finiti (risultato = 0) Z = 1
+	goto usart_tx_end			    ; termino la trasmissione
+; Byte da inviare (risultato !=0)Z = 0
+	movf INDF, w				    ; carico il contenuto dell'indirizzo memorizzato nell'FSR (buffer_usart + incremento) in w			
+	banksel TXREG				    
+	movwf TXREG				    ; carico il contenuto di w nel registro di trasmissione
+	incf FSR				    ; incremento l'indirizzo puntato da FSR
+	decf usart_counter, f			    ; decremento il contatore di byte da trasmettere
 			
 			
 wait_usart:		
 	banksel TXSTA
-	btfss TXSTA, 1				    ; TMRT = 1
-	goto wait_usart
+	btfss TXSTA, 1				    ; controllo il bit TMRT
+						    
+	goto wait_usart				    ; attendo che il buffer di trasmissione si svuoti (se bit = 0)
 	goto irq_end
 			
 usart_tx_end:
 ; Caso dati da trasmettere terminati 
-	banksel PIE1
-	bcf PIE1, 4
-	bsf canSleep, 0
+	banksel PIE1				    
+	bcf PIE1, 4				    ; disabilito l'interrupt della seriale
+	bsf canSleep, 0				    ; il micro può andare in sleep
 	goto irq_end
 						
 ; Ripristino stato registri CPU precedente all'interruzione:
