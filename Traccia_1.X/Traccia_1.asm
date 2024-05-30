@@ -86,19 +86,14 @@ canSleep:
 ; variabile che indica il contatore
 counter:
     DS		1
-; buffer per la conversione del numero in decimale
-decimals:
-    DS		2
 ; variabili USART
 usart_counter:
     DS		1
-contatoreC: 
-    DS		1
+; contatore decine
 contatoreD:
     DS		1
+; contatore unità
 contatoreU:
-    DS		1
-counterTmp:
     DS		1
 
 PSECT udata
@@ -127,7 +122,11 @@ start:			; N.B: l'assembler non accetta una label sulla stessa riga di una diret
 			; inizializzazione hardware
 			pagesel	INIT_HW			; direttiva che imposta la pagina della memoria di programma in cui risiede la subroutine INIT_HW
 			call	INIT_HW			; chiamata alla subroutine indicata dalla label INIT_HW
-
+			
+			;inizializzo il contatore a 0
+			movlw 00000000B
+			movwf counter
+			
 			; inizializzazione stato LED (tutti LED spenti)
 			banksel	PORTD			; selezione banco RAM di PORTD
 			clrf	PORTD
@@ -335,57 +334,31 @@ print_eusart:
 formatta_contatore:	
     
 			movlw 00000000B
-			movwf contatoreC
 			movwf contatoreD
+			movf  counter,w
 			movwf contatoreU
-			movf counter,w
-			movwf counterTmp
-	    loop_div_1:
-			movlw 1
-			subwf counterTmp, w
-			btfss STATUS, 0      ; C = 0
-			goto end_div_1
-			movwf counterTmp 
-			incf contatoreU, f
-			goto loop_div_1		
-	    end_div_1:	
-			movf counter,w
-			movwf counterTmp	
+			   
 	    loop_div_10:
 			movlw 10
-			subwf counterTmp, w
+			subwf contatoreU, w
 			btfss STATUS, 0      ; C = 0
 			goto end_div_10
-			movwf counterTmp
+			movwf contatoreU
 			incf contatoreD, f
 			goto loop_div_10		
-	    end_div_10:	
-			movf counter,w
-			movwf counterTmp
-	    loop_div_100:
-			movlw 100
-			subwf counterTmp, w
-			btfss STATUS, 0      ; C = 0
-			goto end_div_100
-			movwf counterTmp
-			incf contatoreC, f
-			goto loop_div_100		
-	    end_div_100:	
+	    end_div_10:		
 	
 			banksel print_buffer
-			movlw   '0'   
-			addwf   contatoreC, w
-			movwf   print_buffer
 			movlw   '0'	
 			addwf   contatoreD, w
-			movwf   print_buffer + 1
+			movwf   print_buffer
 			movlw   '0'  
 			addwf   contatoreU, w
-			movwf   print_buffer + 2
+			movwf   print_buffer + 1
 			movlw   10 
-			movwf   print_buffer + 3
+			movwf   print_buffer + 2
 
-			movlw   4
+			movlw   3
 			movwf usart_counter
 			banksel print_buffer
 			movlw print_buffer
